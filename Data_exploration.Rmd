@@ -1,0 +1,293 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(reticulate)
+library(ggplot2)
+library(na.tools)
+listings <- read_csv('melbourne-airbnb-open-data/From_insideairbnb/listings.csv')
+reviews <- read_csv('melbourne-airbnb-open-data/From_insideairbnb/reviews.csv')
+#colnames(listings)
+#colnames(reviews)
+```
+
+
+```{r}
+unique(listings$scrape_id)
+listings <- select(listings, -scrape_id)
+summary(listings)
+```
+
+
+Remove columns which have only one value
+```{r}
+listings_duplicate <- listings
+#a <- apply(listings_duplicate,2,unique)
+a<- sapply(listings_duplicate, function(y) sum(length(which(is.na(y)))))
+#a[1:2]
+#is.vector(a)
+#a
+listings_duplicate <- listings[,colSums(is.na(listings)) < nrow(listings)]
+length(listings_duplicate)
+```
+This removed 6 columns which have entire nulls
+
+URL's doesnt effect our analysis so we can remove those aswell
+```{r}
+listings_duplicate[,names(listings_duplicate)[grep("url",names(listings_duplicate))]] <- NULL
+ length(listings_duplicate)
+```
+This removes the 5 columns which have urls
+
+Deleting the columns which have more then 70% of null values in it
+```{r}
+total <- nrow(listings_duplicate)
+b <-  round(total * 0.7)
+b
+listings_duplicate <- listings_duplicate[,colSums(is.na(listings_duplicate)) < b]
+length(listings_duplicate)
+
+```
+
+This removed 3 columns
+```{r}
+listings_duplicate[,c("security_deposit","weekly_price","monthly_price","first_review","jurisdiction_names","zipcode","street","market","cleaning_fee","name","interaction","access","space","notes","summary","description","host_name","host_has_profile_pic","host_verifications","host_neighborhood","require_guest_profile_picture","require_guest_phone_verification","calculated_host_listings_count", "host_location","transit","neighborhood_overview","house_rules","host_about","license", "requires_license","host_neighbourhood")] <- NULL
+colnames(listings_duplicate)
+```
+This gives 64 columns
+
+Check for the columns which have same data
+
+```{r}
+listings_duplicate[,names(listings_duplicate[(duplicated(t(listings_duplicate)))])] <- NULL
+length(listings_duplicate)
+```
+This has deleted 2 more columns
+```{r}
+a<- strsplit(listings_duplicate$amenities,",")
+listings_duplicate$TV <- ifelse(grepl("TV",a, ignore.case = T)==T,1,0)
+listings_duplicate$Internet <- ifelse(grepl("Internet",a, ignore.case= T)==T,1,0)
+listings_duplicate$AirCondition <- ifelse(grepl("conditioning",a, ignore.case =T)==T,1,0)
+listings_duplicate$Pets <- ifelse(grepl("Pet",a, ignore.case = T)==T,1,0)
+listings_duplicate$Pets <- ifelse(grepl("Dog",a, ignore.case = T)==T,1,listings_duplicate$Pets)
+listings_duplicate$Pets <- ifelse(grepl("Cat",a, ignore.case = T)==T,1,listings_duplicate$Pets)
+listings_duplicate$Kitchen <- ifelse(grepl("Kitchen",a, ignore.case = T)==T,1,0)
+listings_duplicate$Breakfast <- ifelse(grepl("breakfast",a, ignore.case = T)==T,1,0)
+listings_duplicate[,c("amenities")] <- NULL
+```
+
+```{r}
+listings_duplicate["Pets"] <- listings_duplicate[["Pets"]] == 1
+listings_duplicate["TV"] <-  listings_duplicate[["TV"]] == 1
+listings_duplicate["Internet"] <-  listings_duplicate[["Internet"]] == 1
+listings_duplicate["AirCondition"] <-  listings_duplicate[["AirCondition"]] == 1
+listings_duplicate["Kitchen"] <-  listings_duplicate[["Kitchen"]] == 1
+listings_duplicate["Breakfast"] <-  listings_duplicate[["Breakfast"]] == 1
+```
+
+Converting the price values from non numeric to numeric
+
+```{r}
+listings_duplicate$price <- listings$price
+typeof(listings$price)
+listings_duplicate$price <- sub("\\$","",listings_duplicate$price)
+listings_duplicate$price <- as.numeric(listings_duplicate$price)
+typeof(listings_duplicate$price)
+```
+
+```{r}
+listings_duplicate$host_response_time <- as.factor(listings_duplicate$host_response_time)
+listings_duplicate$host_is_superhost <- as.factor(listings_duplicate$host_is_superhost)
+listings_duplicate$host_identity_verified <- as.factor(listings_duplicate$host_identity_verified)
+listings_duplicate$neighbourhood_cleansed <- as.factor(listings_duplicate$neighbourhood_cleansed)
+listings_duplicate$is_location_exact <- as.factor(listings_duplicate$is_location_exact)
+listings_duplicate$property_type <- as.factor(listings_duplicate$property_type)
+listings_duplicate$room_type <- as.factor(listings_duplicate$room_type)
+listings_duplicate$bed_type <- as.factor(listings_duplicate$bed_type)
+listings_duplicate$calendar_updated <- as.factor(listings_duplicate$calendar_updated)
+listings_duplicate$instant_bookable <- as.factor(listings_duplicate$instant_bookable)
+ listings_duplicate$cancellation_policy<- as.factor(listings_duplicate$cancellation_policy)
+```
+
+Finding outliers in price column, we see that few columns have 0, replacing them with price mean
+
+```{r}
+
+change <- which(listings_duplicate$price==0)
+change
+#summary(listings_duplicate$price)
+mean_value <- 144
+colnames(listings_duplicate)
+for (i in 1:length(change))
+  {
+ row_number1 <- change[i]
+  listings_duplicate[row_number1,29] <-mean_value 
+}
+
+
+```
+
+```{r}
+listings_duplicate
+unique(listings_duplicate$experiences_offered)
+```
+
+After checking i have got few more columns which have null data and columns like country and state have same values. experiences_offered, host_acceptance_rate, state, country_code, country, 
+-some columns are null neighbourhood
+```{r}
+#listings_duplicate$host_acceptance_rate
+listings_duplicate[,c( "experiences_offered", "host_acceptance_rate", "state", "country_code", "country")] <- NULL
+unique(listings$scrape_id)
+unique(listings$state)
+unique(listings$country_code)
+unique(listings$country)
+listings_duplicate[,c( "scrape_id", "state", "country_code", "country")] <- NULL
+
+```
+Removing $ symbol and chnaging the datatype of extra_people column
+```{r}
+typeof(listings$extra_people)
+listings_duplicate$extra_people <- sub("\\$","",listings_duplicate$extra_people)
+listings_duplicate$extra_people <- as.numeric(listings_duplicate$extra_people)
+typeof(listings_duplicate$extra_people)
+```
+
+```{r}
+f <- which(is.na(listings_duplicate$neighbourhood))
+f
+```
+
+```{r final}
+listings_duplicate
+```
+```{r}
+
+conda_create("r-reticulate")
+conda_install("r-reticulate","folium")
+folium <- import("folium")
+#py_install("folium")
+```
+
+
+
+```{python}
+import pandas
+import folium
+from folium.plugins import FastMarkerCluster
+df_1 = r.listings_duplicate
+lat =df_1['latitude']
+lon=df_1['longitude']
+locations = list(zip(lat, lon))
+
+map_mel = folium.Map(location=[-37.815018, 144.946014],tiles='CartoDB Positron',zoom_start=10 ) 
+FastMarkerCluster(data=locations).add_to(map_mel)
+map_mel
+
+
+```
+
+
+```{r}
+
+ggplot(listings_duplicate) + geom_histogram(aes(fill=neighbourhood_cleansed, neighbourhood_cleansed), stat = "count",alpha = 0.85) + 
+  theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") + 
+  ggtitle("The Number of Property in Each Area")+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+ggplot(listings_duplicate) + geom_histogram(aes(fill=room_type, room_type), stat = "count",alpha = 0.85) + 
+  theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") + 
+  ggtitle("The room types")#+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+ggplot(listings_duplicate) + geom_histogram(aes(fill=property_type, property_type), stat = "count",alpha = 0.85) + 
+  theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") + 
+  ggtitle("The room types")+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+ggplot(listings_duplicate, aes(price)) + 
+  stat_ecdf(geom = "step", color = '#fd5c63', lwd = 1.2) + 
+  ylab("Proportion") + xlab("Price") + theme_minimal(base_size = 13) + facet_grid(~room_type)
+  ggtitle("The Cumulative Distrubition of Property Price") 
+```
+```{r}
+
+ggplot(na.rm(listings_duplicate)) + 
+  geom_bar(aes(price),fill = '#fd5c63',alpha = 0.85,binwidth = 10) + 
+  theme_minimal(base_size = 13) + xlab("Price") + ylab("Number") + 
+  ggtitle("The Distrubition of Property Price")   
+
+ggplot(listings_duplicate) + 
+  geom_bar(aes(price),fill = '#fd5c63',alpha = 0.85,binwidth = 10) + 
+  theme_minimal(base_size = 13) + xlab("Price") + ylab("Number") + 
+  ggtitle("The Distribution of Property Price")
+```
+
+
+
+From the above CDF, we can see that 50% of the prices are below $125
+
+```{r}
+
+bdays <- c(reviews$date)
+reviews$day <- weekdays(bdays)
+reviews$month <- month(reviews$date)
+reviews$month <- sub("12","Dec",reviews$month)
+reviews$month <- sub("11","Nov",reviews$month)
+reviews$month <- sub("10","Oct",reviews$month)
+reviews$month <- sub("9","Sep",reviews$month)
+reviews$month <- sub("8","Aug",reviews$month)
+reviews$month <- sub("7","Jul",reviews$month)
+reviews$month <- sub("6","Jun",reviews$month)
+reviews$month <- sub("5","May",reviews$month)
+reviews$month <- sub("4","Apr",reviews$month)
+reviews$month <- sub("3","Mar",reviews$month)
+reviews$month <- sub("2","Feb",reviews$month)
+reviews$month <- sub("1","Jan",reviews$month)
+
+ggplot(reviews) + geom_histogram(aes(fill=day, day), stat = "count",alpha = 0.85) +theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") 
+
+
+ggplot(reviews) + geom_histogram(aes(fill=month, month), stat = "count",alpha = 0.85) +theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") 
+
+
+```
+
+```{r}
+bdays <- c(reviews$date)
+reviews$day <- weekdays(bdays)
+reviews$month <- month(reviews$date)
+reviews$month <- sub("12","Dec",reviews$month)
+reviews$month <- sub("11","Nov",reviews$month)
+reviews$month <- sub("10","Oct",reviews$month)
+reviews$month <- sub("9","Sep",reviews$month)
+reviews$month <- sub("8","Aug",reviews$month)
+reviews$month <- sub("7","Jul",reviews$month)
+reviews$month <- sub("6","Jun",reviews$month)
+reviews$month <- sub("5","May",reviews$month)
+reviews$month <- sub("4","Apr",reviews$month)
+reviews$month <- sub("3","Mar",reviews$month)
+reviews$month <- sub("2","Feb",reviews$month)
+reviews$month <- sub("1","Jan",reviews$month)
+```
+
+```{r}
+ggplot(reviews) + geom_histogram(aes(fill=day, day), stat = "count",alpha = 0.85) +theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") 
+
+
+```
+
+```{r}
+ggplot(reviews) + geom_histogram(aes(fill=month, month), stat = "count",alpha = 0.85) +theme_minimal(base_size=13) + xlab("") + ylab("") +theme(legend.position="none") 
+```
+```{r}
+boxplot(listings_duplicate$price~listings_duplicate$room_type)
+summary(listings_duplicate$price~listings_duplicate$room_type)
+summary(listings_duplicate$room_type)
+```
